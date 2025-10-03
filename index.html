@@ -281,26 +281,21 @@
     // ===== MODAL COMPONENTS =====
     // =================================================================================
     const PaymentModal = ({ onPaymentSuccess, onClose, userName }) => { const [premiumCode, setPremiumCode] = useState(''); const [isLoading, setIsLoading] = useState(false); const [error, setError] = useState(''); const handleVerify = (e) => { e.preventDefault(); setError(''); const expectedCode = generatePremiumCode(userName); if (premiumCode === expectedCode) { setIsLoading(true); setTimeout(() => { setIsLoading(false); onPaymentSuccess(); }, 1500); } else { setError('Invalid Premium Code. Please check the code received from the admin.'); } }; return ( <div className="overlay"> <div className="modal-box glassmorphism text-white relative"> <button onClick={onClose} className="absolute top-4 right-4 text-white/50 hover:text-white text-2xl font-bold">&times;</button> <h2 className="text-3xl font-extrabold mb-2 font-serif">Unlock Premium Access</h2> <p className="text-white/80 mb-6">Gain instant access to all exclusive features.</p> <div className="text-center bg-green-900/50 border border-green-500/50 rounded-xl p-4 mb-6"> <p className="text-lg">One-Time Payment</p> <p className="text-5xl font-bold text-green-300">Rs. {DATA.premiumPrice}</p> </div> <div className="text-left space-y-4"> <div> <p className="font-bold text-lg mb-1">Step 1: Pay using eSewa</p> <p className="text-white/80">Open your eSewa app and send <span className="font-bold text-white">Rs. {DATA.premiumPrice}</span> to the following eSewa ID:</p> <div className="bg-black/30 p-3 rounded-lg mt-2 text-center text-xl font-mono tracking-widest">{DATA.esewaId}</div> </div> <div> <p className="font-bold text-lg mb-1">Step 2: Activate Your Account</p> <p className="text-white/80">After paying, contact the admin via WhatsApp to get your personal premium code, then enter it below to activate.</p> <a href={`https://wa.me/${DATA.whatsAppContactNumber}?text=${encodeURIComponent(`I have made the payment for the Balen Scholarship Prep Portal premium access. Please provide me with my premium code.`)}`} target="_blank" rel="noopener noreferrer" className="inline-block mt-2 mb-3 bg-green-500 text-white font-bold py-2 px-4 rounded-full text-sm"><i className="fab fa-whatsapp mr-2"></i>Contact Admin for Code</a> <form onSubmit={handleVerify} className="mt-2"> <input type="text" value={premiumCode} onChange={(e) => setPremiumCode(e.target.value)} placeholder="Enter Premium Code from Admin" className="w-full p-3 border-0 rounded-md bg-white/20 placeholder-white/60 text-white focus:ring-2 focus:ring-indigo-400 focus:outline-none" required /> {error && <p className="text-red-400 text-sm mt-2 text-center">{error}</p>} <button type="submit" className="w-full gradient-button text-white font-bold py-3 px-6 rounded-full shadow-lg text-lg mt-4" disabled={isLoading}> {isLoading ? ( <Fragment> <i className="fas fa-spinner fa-spin mr-2"></i>Activating... </Fragment> ) : ( <Fragment> <i className="fas fa-key mr-2"></i>Activate Premium </Fragment> )} </button> </form> </div> </div> </div> </div> ); };
- const PdfViewerModal = ({ pdfInfo, onClose }) => {
+    const PdfViewerModal = ({ pdfInfo, onClose }) => {
         if (!pdfInfo || !pdfInfo.url) return null;
 
         const [isLoading, setIsLoading] = useState(true);
-        const viewerRef = useRef(null); // Ref for the fullscreen element
+        const viewerRef = useRef(null); 
 
-        // Generate a unique, stable key for the PDF to use in localStorage
         const pdfId = useMemo(() => pdfInfo.title.replace(/\s+/g, '_'), [pdfInfo]);
 
-        // State for progress tracking and notes
         const [progressPage, setProgressPage] = useState('');
         const [savedPage, setSavedPage] = useState(null);
         const [showSavedConfirmation, setShowSavedConfirmation] = useState(false);
-        const [notes, setNotes] = useState('');
 
-        // Function to construct the high-quality embed URL
         const getEmbedUrl = useCallback((url, page) => {
             const fileIdMatch = url.match(/drive\.google\.com\/(?:file\/d\/|drive\/folders\/)([a-zA-Z0-9_-]+)/);
             if (!fileIdMatch) return null;
-            // The /preview endpoint is reliable and provides a clean, embeddable view.
             let embedUrl = `https://drive.google.com/file/d/${fileIdMatch[1]}/preview`;
             if (page) {
                 embedUrl += `#page=${page}`;
@@ -308,26 +303,13 @@
             return embedUrl;
         }, []);
         
-        // Load saved progress and notes when the modal opens
         useEffect(() => {
             const savedPageData = localStorage.getItem(`pdfProgress_${pdfId}`);
             if (savedPageData) {
                 setSavedPage(savedPageData);
                 setProgressPage(savedPageData);
             }
-            const savedNotesData = localStorage.getItem(`pdfNotes_${pdfId}`);
-            if (savedNotesData) {
-                setNotes(savedNotesData);
-            }
         }, [pdfId]);
-
-        // Automatically save notes as the user types (debounced)
-        useEffect(() => {
-            const handler = setTimeout(() => {
-                localStorage.setItem(`pdfNotes_${pdfId}`, notes);
-            }, 1000); // Save 1 second after user stops typing
-            return () => clearTimeout(handler);
-        }, [notes, pdfId]);
 
         const handleSaveProgress = (e) => {
             e.preventDefault();
@@ -351,16 +333,51 @@
         return (
             <div className="overlay" onClick={onClose} onContextMenu={preventContextMenu}>
                 <div 
-                    className="bg-slate-900 border border-slate-700 p-0 rounded-xl overflow-hidden w-full h-full max-w-7xl max-h-[95vh] flex flex-col md:flex-row animate-popIn" 
+                    ref={viewerRef}
+                    className="pdf-viewer-modal bg-slate-900 border border-slate-700 animate-popIn" 
                     onClick={e => e.stopPropagation()}
                 >
+                    {/* Header with Controls */}
+                    <div className="header flex-shrink-0">
+                        <h3 className="truncate pr-4">{pdfInfo.title}</h3>
+                        <div className="flex items-center gap-2">
+                             {/* Bookmark Form */}
+                            <form onSubmit={handleSaveProgress} className="hidden sm:flex items-center gap-2 relative">
+                                <label htmlFor="page-input" className="text-sm text-slate-400">Bookmark Page:</label>
+                                <input 
+                                    id="page-input"
+                                    type="number" 
+                                    value={progressPage} 
+                                    onChange={(e) => setProgressPage(e.target.value)} 
+                                    className="bg-slate-700 rounded-md px-2 py-1 w-20 text-center text-white placeholder-slate-400" 
+                                    placeholder="#"
+                                    required
+                                />
+                                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-1 px-3 rounded-md">Save</button>
+                                {showSavedConfirmation && <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg animate-popIn">Saved!</div>}
+                            </form>
+                            <button onClick={handleFullscreen} title="Fullscreen" className="bg-white/10 hover:bg-white/20 text-white rounded-full w-8 h-8 flex items-center justify-center">
+                                <i className="fas fa-expand"></i>
+                            </button>
+                            <button onClick={onClose} title="Close" className="close-button text-xl">&times;</button>
+                        </div>
+                    </div>
+
                     {/* Main PDF Viewer Area */}
-                    <div className="relative flex-grow bg-gray-800" ref={viewerRef}>
+                    <div className="relative flex-grow bg-gray-800">
                         {isLoading && (
-                            <div className="absolute inset-0 flex flex-col justify-center items-center text-white bg-gray-800 z-10">
-                                <i className="fas fa-spinner fa-spin text-4xl mb-4"></i>
-                                <p>Loading HD Document...</p>
+                            <div className="absolute inset-0 flex flex-col justify-center items-center text-white bg-gray-800/90 backdrop-blur-sm z-10 p-4 text-center">
+                                <i className="fas fa-spinner fa-spin text-4xl mb-6"></i>
+                                <p className="font-bold text-lg">Loading HD Document...</p>
                                 {savedPage && <p className="text-sm text-gray-400 mt-2">Jumping to your bookmark on page {savedPage}...</p>}
+                                
+                                {/* Zooming Instructions */}
+                                <div className="mt-8 bg-indigo-900/50 border border-indigo-500 rounded-lg p-4 max-w-md">
+                                    <h4 className="font-semibold text-indigo-300 flex items-center justify-center gap-2"><i className="fas fa-info-circle"></i> Heads Up!</h4>
+                                    <p className="text-slate-300 text-sm mt-2">
+                                        To **zoom**, print, or go to a page, move your cursor to the **top-right corner** of the document viewer. A toolbar will appear.
+                                    </p>
+                                </div>
                             </div>
                         )}
                         <iframe
@@ -368,55 +385,8 @@
                             onLoad={() => setIsLoading(false)}
                             className={`w-full h-full border-0 transition-opacity duration-500 ${isLoading ? 'opacity-0' : 'opacity-100'}`}
                             title="HD PDF Viewer"
-                            // ** SECURITY ENHANCEMENT **
-                            // This sandbox configuration allows the viewer to run scripts but blocks downloads, popups, and printing.
                             sandbox="allow-scripts allow-same-origin"
                         ></iframe>
-                    </div>
-
-                    {/* Tools & Notes Panel */}
-                    <div className="w-full md:w-80 lg:w-96 flex-shrink-0 bg-slate-800/50 p-4 md:p-6 flex flex-col overflow-y-auto">
-                        <div className="flex justify-between items-center mb-4">
-                             <h3 className="text-xl font-bold text-white pr-4">{pdfInfo.title}</h3>
-                             <div className="flex items-center gap-2 flex-shrink-0">
-                                <button onClick={handleFullscreen} title="Fullscreen" className="bg-white/10 hover:bg-white/20 text-white rounded-full w-8 h-8 flex items-center justify-center">
-                                    <i className="fas fa-expand"></i>
-                                </button>
-                                <button onClick={onClose} title="Close" className="bg-white/10 hover:bg-white/20 text-white rounded-full w-8 h-8 flex items-center justify-center text-xl">&times;</button>
-                             </div>
-                        </div>
-                        
-                        {/* Progress Tracking Section */}
-                        <div className="bg-slate-900/70 p-4 rounded-lg mb-6">
-                             <h4 className="font-semibold text-white mb-2 flex items-center"><i className="fas fa-bookmark text-indigo-400 mr-2"></i> Bookmark Progress</h4>
-                            <p className="text-sm text-slate-400 mb-3">
-                                {savedPage ? `Last bookmark is on page ${savedPage}.` : "No bookmark set yet."}
-                            </p>
-                            <form onSubmit={handleSaveProgress} className="flex items-center gap-2">
-                                <input 
-                                    type="number" 
-                                    value={progressPage} 
-                                    onChange={(e) => setProgressPage(e.target.value)} 
-                                    className="bg-slate-700 rounded-md px-3 py-2 w-full text-white placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:outline-none" 
-                                    placeholder="Enter page #"
-                                    required
-                                />
-                                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md transition-colors">Save</button>
-                            </form>
-                            {showSavedConfirmation && <p className="text-green-400 text-sm font-semibold mt-2 animate-fadeIn">Bookmark saved!</p>}
-                        </div>
-
-                        {/* Note Taking Section */}
-                        <div className="flex-grow flex flex-col bg-slate-900/70 p-4 rounded-lg">
-                            <h4 className="font-semibold text-white mb-2 flex items-center"><i className="fas fa-pencil-alt text-amber-400 mr-2"></i> My Notes</h4>
-                            <p className="text-sm text-slate-400 mb-3">Your notes are saved automatically.</p>
-                            <textarea
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                                placeholder="Write down your thoughts, summaries, or important points here..."
-                                className="w-full h-full flex-grow bg-slate-700/80 text-white rounded-md p-3 text-sm placeholder-slate-400 focus:ring-2 focus:ring-amber-500 focus:outline-none min-h-[150px] resize-none"
-                            ></textarea>
-                        </div>
                     </div>
                 </div>
             </div>
